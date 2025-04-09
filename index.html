@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- user-scalable=no 추가하여 확대/축소 방지 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>스네이크 게임 (스와이프 조작)</title>
+    <title>스네이크 게임 (스와이프/키보드 조작, 빠른 재시작)</title>
     <style>
         body {
             display: flex;
@@ -83,6 +83,12 @@
             box-sizing: border-box;
             padding: 10px;
         }
+        /* 게임 오버 화면에 추가 안내 문구 스타일 */
+        .game-over .restart-hint {
+            font-size: 16px;
+            margin-top: 15px;
+            color: #ccc;
+        }
 
         button {
             margin-top: 10px;
@@ -110,6 +116,12 @@
             margin-bottom: 10px;
             font-size: 14px; /* 크기 조정 */
         }
+        /* 시작 전 안내 문구 스타일 */
+        .start-hint {
+            font-size: 14px;
+            color: #555;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -120,12 +132,16 @@
                 <div>게임 오버!</div>
                 <div>점수: <span id="final-score">0</span></div>
                 <button id="restart-button">다시 시작</button>
+                <!-- 게임 오버 시 빠른 재시작 안내 -->
+                <div class="restart-hint">(Enter 또는 Space로도 가능)</div>
             </div>
         </div>
         <div class="controls">
             <!-- 안내 문구 수정 -->
             <div class="control-text">방향키 또는 화면 스와이프로 조작하세요!</div>
             <button id="start-button">게임 시작</button>
+            <!-- 시작 전 빠른 시작 안내 -->
+            <div class="start-hint">(Enter 또는 Space로도 시작 가능)</div>
         </div>
     </div>
 
@@ -137,6 +153,7 @@
             const gameOverScreen = document.querySelector('.game-over');
             const startButton = document.getElementById('start-button');
             const restartButton = document.getElementById('restart-button');
+            const startHint = document.querySelector('.start-hint'); // 시작 힌트 요소
 
             // 게임 보드 크기 관련 변수 (initGame에서 설정)
             let boardWidth, boardHeight, gridSize, gridWidth, gridHeight;
@@ -162,13 +179,9 @@
             function calculateBoardSize() {
                 boardWidth = gameBoard.clientWidth;
                 boardHeight = gameBoard.clientHeight;
-                // 가로 기준 20칸으로 gridSize 계산
                 gridSize = boardWidth / 20;
                 gridWidth = Math.floor(boardWidth / gridSize);
-                 // 세로 칸 수도 계산된 gridSize 기준으로 설정
                 gridHeight = Math.floor(boardHeight / gridSize);
-
-                // gridSize가 너무 작아지는 것 방지 (최소값 설정 등 가능)
                 if (gridSize < 5) {
                     console.warn("Grid size is very small.");
                 }
@@ -176,27 +189,26 @@
 
             // 게임 초기화
             function initGame() {
-                calculateBoardSize(); // 게임 시작 시 보드 크기 계산
+                calculateBoardSize();
                 clearInterval(gameInterval);
-                // snake 시작 위치 수정 (gridWidth/Height 사용)
                 snake = [
                     {x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight / 2)},
                     {x: Math.floor(gridWidth / 2) - 1, y: Math.floor(gridHeight / 2)},
                     {x: Math.floor(gridWidth / 2) - 2, y: Math.floor(gridHeight / 2)}
                 ];
-                 // 초기 위치 유효성 검사 (화면 크기 변경 후 시작 시 오류 방지)
                  snake = snake.filter(p => p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight);
-                 // 만약 필터링 후 뱀이 없다면 새로 생성
                  if (snake.length === 0) {
                       snake.push({x: Math.max(0, Math.floor(gridWidth / 2)), y: Math.max(0, Math.floor(gridHeight / 2))});
                  }
-                 // 뱀 길이가 1보다 작으면 추가
                  while(snake.length < 3 && snake[0].x > 0) {
                      let lastPart = snake[snake.length-1];
-                     snake.push({ x: lastPart.x - 1, y: lastPart.y });
-                     snake = snake.filter(p => p.x >= 0); // x좌표 유효성 재확인
+                     // 다음 칸이 유효한지 확인하며 추가
+                     if(lastPart.x - 1 >= 0) {
+                       snake.push({ x: lastPart.x - 1, y: lastPart.y });
+                     } else {
+                         break; // 더 이상 왼쪽으로 추가할 수 없음
+                     }
                  }
-
 
                 direction = 'right';
                 nextDirection = 'right';
@@ -209,7 +221,7 @@
                 createFood();
 
                 gameOverScreen.style.display = 'none';
-                isGameRunning = false; // initGame 후에는 아직 실행 전 상태
+                isGameRunning = false;
             }
 
             function clearBoard() {
@@ -218,14 +230,12 @@
             }
 
             function drawSnake() {
-                 clearBoardElements('.snake-part'); // 기존 뱀만 제거
-
+                 clearBoardElements('.snake-part');
                 snake.forEach((part, index) => {
                     if (part.x >= 0 && part.x < gridWidth && part.y >= 0 && part.y < gridHeight) {
                         const snakePart = document.createElement('div');
                         snakePart.className = 'snake-part';
                         if (index === 0) snakePart.classList.add('snake-head');
-
                         const currentGridSize = Math.floor(gridSize);
                         snakePart.style.width = currentGridSize + 'px';
                         snakePart.style.height = currentGridSize + 'px';
@@ -237,12 +247,10 @@
             }
 
              function drawFood() {
-                 clearBoardElements('.food'); // 기존 음식만 제거
-
+                 clearBoardElements('.food');
                 if (food.x !== undefined && food.x >= 0 && food.x < gridWidth && food.y >= 0 && food.y < gridHeight) {
                     const foodElement = document.createElement('div');
                     foodElement.className = 'food';
-
                     const currentGridSize = Math.floor(gridSize);
                     foodElement.style.width = currentGridSize + 'px';
                     foodElement.style.height = currentGridSize + 'px';
@@ -252,12 +260,10 @@
                 }
             }
 
-            // 특정 클래스를 가진 요소만 보드에서 제거하는 함수
             function clearBoardElements(selector) {
                 const elements = gameBoard.querySelectorAll(selector);
                 elements.forEach(el => el.remove());
             }
-
 
             function createFood() {
                  if (gridWidth <= 0 || gridHeight <= 0) {
@@ -266,17 +272,14 @@
                     drawFood();
                     return;
                 }
-
                 let foodX, foodY;
                 let foodOnSnake;
                 let attempts = 0;
                 const maxAttempts = gridWidth * gridHeight * 2;
-
                 do {
                     foodOnSnake = false;
                     foodX = Math.floor(Math.random() * gridWidth);
                     foodY = Math.floor(Math.random() * gridHeight);
-
                     for (let part of snake) {
                         if (part.x === foodX && part.y === foodY) {
                             foodOnSnake = true;
@@ -286,44 +289,34 @@
                     attempts++;
                     if (attempts > maxAttempts) {
                          console.warn("Could not place food without overlapping snake.");
-                         // 최악의 경우, 빈 곳을 못 찾으면 랜덤 위치에 그냥 둠 (또는 다른 처리)
                          foodX = Math.floor(Math.random() * gridWidth);
                          foodY = Math.floor(Math.random() * gridHeight);
                          break;
                     }
                 } while (foodOnSnake);
-
                 food = { x: foodX, y: foodY };
                 drawFood();
             }
 
             function moveSnake() {
                 if (!isGameRunning) return;
-
                 direction = nextDirection;
                 const head = { ...snake[0] };
-
                 switch (direction) {
                     case 'up': head.y -= 1; break;
                     case 'down': head.y += 1; break;
                     case 'left': head.x -= 1; break;
                     case 'right': head.x += 1; break;
                 }
-
                 if (head.x < 0 || head.x >= gridWidth || head.y < 0 || head.y >= gridHeight) {
-                    gameOver();
-                    return;
+                    gameOver(); return;
                 }
-
                 for (let i = 1; i < snake.length; i++) {
                     if (head.x === snake[i].x && head.y === snake[i].y) {
-                        gameOver();
-                        return;
+                        gameOver(); return;
                     }
                 }
-
                 snake.unshift(head);
-
                 if (head.x === food.x && head.y === food.y) {
                     score += 10;
                     scoreDisplay.textContent = score;
@@ -336,10 +329,8 @@
                 } else {
                     snake.pop();
                 }
-
-                // 이동 후에는 뱀과 음식 모두 다시 그림 (음식이 뱀 꼬리에 의해 가려지는 경우 방지)
                 drawSnake();
-                drawFood(); // 음식이 가려지지 않도록 다시 그림
+                drawFood();
             }
 
             function gameOver() {
@@ -347,24 +338,21 @@
                 isGameRunning = false;
                 finalScoreDisplay.textContent = score;
                 gameOverScreen.style.display = 'flex';
-                startButton.textContent = '다시 시작'; // 버튼 텍스트 변경
-                startButton.style.display = 'block'; // 시작 버튼 다시 보이게
-                 document.querySelector('.control-text').style.display = 'block'; // 안내 문구 다시 보이게
+                startButton.textContent = '다시 시작';
+                startButton.style.display = 'block';
+                 document.querySelector('.control-text').style.display = 'block';
+                 startHint.style.display = 'block'; // 게임 오버 시 힌트 다시 표시
             }
 
             function gameLoop() {
                 moveSnake();
             }
 
-             // 방향 설정 함수 (키보드, 스와이프 공용)
             function setDirection(newDirection) {
-                 if (!isGameRunning) return; // 게임 중 아니면 방향 변경 불가
-
+                 if (!isGameRunning) return;
                 const oppositeDirections = {
                     'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'
                 };
-
-                // 현재 방향과 반대 방향이 아닐 때만 nextDirection 업데이트
                 if (direction !== oppositeDirections[newDirection]) {
                     nextDirection = newDirection;
                 }
@@ -374,42 +362,42 @@
 
             // 키보드 이벤트
             document.addEventListener('keydown', (e) => {
-                switch (e.key) {
-                    case 'ArrowUp': setDirection('up'); break;
-                    case 'ArrowDown': setDirection('down'); break;
-                    case 'ArrowLeft': setDirection('left'); break;
-                    case 'ArrowRight': setDirection('right'); break;
+                // 게임이 실행 중이지 않을 때 Enter 또는 Space 누르면 게임 시작/재시작
+                if (!isGameRunning && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault(); // 스페이스바 눌렀을 때 페이지 스크롤 방지
+                    startGameAction();
+                    return; // 시작/재시작 후 다른 키 동작 방지
+                }
+
+                // 게임 실행 중일 때 방향키 처리
+                if (isGameRunning) {
+                    switch (e.key) {
+                        case 'ArrowUp': setDirection('up'); break;
+                        case 'ArrowDown': setDirection('down'); break;
+                        case 'ArrowLeft': setDirection('left'); break;
+                        case 'ArrowRight': setDirection('right'); break;
+                    }
                 }
             });
 
             // 터치 스와이프 이벤트
             gameBoard.addEventListener('touchstart', (e) => {
-                // 게임 중일 때만 스와이프 시작점 기록
                 if (!isGameRunning) return;
-                // 여러 손가락 터치 무시, 첫번째 터치만 사용
                 const touch = e.touches[0];
                 touchStartX = touch.clientX;
                 touchStartY = touch.clientY;
-                // console.log('Touch Start:', touchStartX, touchStartY); // 디버깅용
-            }, { passive: true }); // 스크롤 성능 향상 위해 passive 설정 (preventDefault 안 할 것이므로)
+            }, { passive: true });
 
             gameBoard.addEventListener('touchmove', (e) => {
-                // 게임 보드 위에서 스크롤 등 기본 동작 방지 (touch-action: none; 으로도 처리)
                  e.preventDefault();
-            }, { passive: false }); // preventDefault 사용 위해 passive: false 명시
+            }, { passive: false });
 
             gameBoard.addEventListener('touchend', (e) => {
-                if (!isGameRunning || touchStartX === 0) return; // 게임 중이 아니거나 시작점 없으면 무시
-
-                // 마지막 터치 지점 사용
+                if (!isGameRunning || touchStartX === 0) return;
                 const touch = e.changedTouches[0];
                 touchEndX = touch.clientX;
                 touchEndY = touch.clientY;
-                // console.log('Touch End:', touchEndX, touchEndY); // 디버깅용
-
-                handleSwipe(); // 스와이프 처리 함수 호출
-
-                // 시작점 초기화
+                handleSwipe();
                 touchStartX = 0;
                 touchStartY = 0;
             }, { passive: true });
@@ -418,42 +406,27 @@
             function handleSwipe() {
                 const deltaX = touchEndX - touchStartX;
                 const deltaY = touchEndY - touchStartY;
-                // console.log('Delta:', deltaX, deltaY); // 디버깅용
-
-                // 절대값 비교로 주 이동 방향 결정
-                if (Math.abs(deltaX) > Math.abs(deltaY)) { // 수평 스와이프
-                    // 최소 이동 거리(threshold) 넘었는지 확인
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
                     if (Math.abs(deltaX) > swipeThreshold) {
-                        if (deltaX > 0) {
-                            setDirection('right');
-                            // console.log('Swipe Right'); // 디버깅용
-                        } else {
-                            setDirection('left');
-                            // console.log('Swipe Left'); // 디버깅용
-                        }
+                        setDirection(deltaX > 0 ? 'right' : 'left');
                     }
-                } else { // 수직 스와이프
+                } else {
                     if (Math.abs(deltaY) > swipeThreshold) {
-                        if (deltaY > 0) {
-                            setDirection('down');
-                             // console.log('Swipe Down'); // 디버깅용
-                        } else {
-                            setDirection('up');
-                             // console.log('Swipe Up'); // 디버깅용
-                        }
+                        setDirection(deltaY > 0 ? 'down' : 'up');
                     }
                 }
             }
 
             // 게임 시작/재시작 공통 로직
             function startGameAction() {
-                 // 게임 시작 전에 항상 보드 크기 재계산
                  calculateBoardSize();
-                 initGame(); // 게임 초기화 (내부에서 isGameRunning=false 설정)
-                 isGameRunning = true; // 게임 시작 상태로 변경
+                 initGame();
+                 isGameRunning = true;
                  gameInterval = setInterval(gameLoop, gameSpeed);
-                 startButton.style.display = 'none'; // 시작 버튼 숨김
-                 document.querySelector('.control-text').style.display = 'none'; // 안내 문구 숨김
+                 startButton.style.display = 'none';
+                 document.querySelector('.control-text').style.display = 'none';
+                 startHint.style.display = 'none'; // 게임 시작 시 힌트 숨김
+                 gameOverScreen.style.display = 'none'; // 게임오버 화면 확실히 숨김
             }
 
             // 시작 버튼
@@ -461,27 +434,25 @@
             // 게임오버 화면의 재시작 버튼
             restartButton.addEventListener('click', startGameAction);
 
-            // 창 크기 변경 시 처리 (게임 중이 아닐 때만 보드 다시 그림 - 옵션)
+            // 창 크기 변경 시 처리
             window.addEventListener('resize', () => {
                  if (!isGameRunning) {
-                      // 게임 중이 아닐 때 크기가 바뀌면 초기 상태로 리셋
                       setupInitialScreen();
                  }
              });
 
              // 초기 화면 설정 함수
             function setupInitialScreen() {
-                calculateBoardSize(); // 초기 보드 크기 계산
+                calculateBoardSize();
                 clearBoard();
                 gameOverScreen.style.display = 'none';
                 startButton.textContent = '게임 시작';
                 startButton.style.display = 'block';
                 document.querySelector('.control-text').style.display = 'block';
+                startHint.style.display = 'block'; // 초기 화면에 힌트 표시
                 scoreDisplay.textContent = 0;
                 isGameRunning = false;
-                food = {}; // 음식 초기화
-                // 초기 안내용 뱀/음식 그리기 (선택 사항)
-                // drawInitialElementsIfNeeded();
+                food = {};
             }
 
             // 페이지 로드 시 초기 화면 설정
