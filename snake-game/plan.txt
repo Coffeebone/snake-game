@@ -1,0 +1,17 @@
+snake-game/
+├── public/
+│   ├── index.html
+│   ├── css/
+│   │   └── styles.css
+│   └── js/
+│       ├── game.js
+│       ├── auth.js
+│       └── leaderboard.js
+├── server/
+│   ├── index.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   └── scores.js
+│   └── database/
+│       └── db.js
+└── package.json
