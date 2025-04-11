@@ -1,0 +1,463 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <!-- user-scalable=no 추가하여 확대/축소 방지 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>스네이크 게임 (스와이프/키보드 조작, 빠른 재시작)</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh; /* 화면 전체 높이 사용 */
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            /* 모바일에서 선택 및 기본 터치 동작 방지 */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            overflow: hidden; /* 페이지 스크롤 방지 */
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #game-board {
+             /* 화면 크기에 맞춰 조정, 최대 400px */
+            width: min(90vw, 400px);
+            height: min(90vw, 400px);
+            border: 2px solid #333;
+            background-color: #fff;
+            position: relative; /* 자식 absolute 요소의 기준점 */
+            box-sizing: border-box;
+             /* 스와이프 시 스크롤, 확대/축소 등 기본 브라우저 동작 방지 */
+            touch-action: none;
+        }
+
+        .score-board {
+            margin: 15px 0; /* 간격 조정 */
+            font-size: 20px; /* 크기 조정 */
+            font-weight: bold;
+        }
+
+        .snake-part {
+            /* 크기는 JS에서 동적 설정 */
+            background-color: #4CAF50;
+            position: absolute;
+            box-sizing: border-box;
+            /* z-index 기본값 auto (0) */
+        }
+
+        .snake-head {
+            background-color: #2E7D32;
+        }
+
+        .food {
+            /* 크기는 JS에서 동적 설정 */
+            background-color: #FF5722;
+            position: absolute;
+            border-radius: 50%;
+            /* z-index 기본값 auto (0) */
+        }
+
+        .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px; /* 크기 조정 */
+            text-align: center;
+            display: none; /* 평소에는 숨김 */
+            box-sizing: border-box;
+            padding: 10px;
+            z-index: 10; /* 다른 게임 요소(뱀, 음식)보다 위에 표시되도록 설정 */
+        }
+        /* 게임 오버 화면에 추가 안내 문구 스타일 */
+        .game-over .restart-hint {
+            font-size: 16px;
+            margin-top: 15px;
+            color: #ccc;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            /* 모바일 터치 하이라이트 제거 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .control-text {
+            margin-bottom: 10px;
+            font-size: 14px; /* 크기 조정 */
+        }
+        /* 시작 전 안내 문구 스타일 */
+        .start-hint {
+            font-size: 14px;
+            color: #555;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="score-board">점수: <span id="score">0</span></div>
+        <div id="game-board">
+            <!-- 게임 오버 화면이 뱀/음식보다 HTML 구조상 뒤에 오는 것이 좋지만, -->
+            <!-- z-index로 제어하므로 순서는 크게 중요하지 않음 -->
+            <div class="game-over">
+                <div>게임 오버!</div>
+                <div>점수: <span id="final-score">0</span></div>
+                <button id="restart-button">다시 시작</button>
+                <!-- 게임 오버 시 빠른 재시작 안내 -->
+                <div class="restart-hint">(Enter 또는 Space로도 가능)</div>
+            </div>
+            <!-- 뱀과 음식 요소는 JS에 의해 이 안에 추가됨 -->
+        </div>
+        <div class="controls">
+            <!-- 안내 문구 수정 -->
+            <div class="control-text">방향키 또는 화면 스와이프로 조작하세요!</div>
+            <button id="start-button">게임 시작</button>
+            <!-- 시작 전 빠른 시작 안내 -->
+            <div class="start-hint">(Enter 또는 Space로도 시작 가능)</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gameBoard = document.getElementById('game-board');
+            const scoreDisplay = document.getElementById('score');
+            const finalScoreDisplay = document.getElementById('final-score');
+            const gameOverScreen = document.querySelector('.game-over');
+            const startButton = document.getElementById('start-button');
+            const restartButton = document.getElementById('restart-button');
+            const startHint = document.querySelector('.start-hint'); // 시작 힌트 요소
+
+            // 게임 보드 크기 관련 변수 (initGame에서 설정)
+            let boardWidth, boardHeight, gridSize, gridWidth, gridHeight;
+
+            let snake = [];
+            let food = {};
+            let direction = 'right';
+            let nextDirection = 'right';
+            let gameInterval;
+            let score = 0;
+            let gameSpeed = 150;
+            let isGameRunning = false;
+
+            // --- 터치 스와이프 관련 변수 ---
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchEndX = 0;
+            let touchEndY = 0;
+            const swipeThreshold = 30; // 최소 스와이프 거리 (px)
+            // -----------------------------
+
+            // 게임 보드 크기 계산 및 설정 함수
+            function calculateBoardSize() {
+                boardWidth = gameBoard.clientWidth;
+                boardHeight = gameBoard.clientHeight;
+                gridSize = boardWidth / 20;
+                gridWidth = Math.floor(boardWidth / gridSize);
+                gridHeight = Math.floor(boardHeight / gridSize);
+                if (gridSize < 5) {
+                    console.warn("Grid size is very small.");
+                }
+            }
+
+            // 게임 초기화
+            function initGame() {
+                calculateBoardSize();
+                clearInterval(gameInterval);
+                snake = [
+                    {x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight / 2)},
+                    {x: Math.floor(gridWidth / 2) - 1, y: Math.floor(gridHeight / 2)},
+                    {x: Math.floor(gridWidth / 2) - 2, y: Math.floor(gridHeight / 2)}
+                ];
+                 snake = snake.filter(p => p.x >= 0 && p.x < gridWidth && p.y >= 0 && p.y < gridHeight);
+                 if (snake.length === 0) {
+                      snake.push({x: Math.max(0, Math.floor(gridWidth / 2)), y: Math.max(0, Math.floor(gridHeight / 2))});
+                 }
+                 while(snake.length < 3 && snake[0].x > 0) {
+                     let lastPart = snake[snake.length-1];
+                     if(lastPart.x - 1 >= 0) {
+                       snake.push({ x: lastPart.x - 1, y: lastPart.y });
+                     } else {
+                         break;
+                     }
+                 }
+
+                direction = 'right';
+                nextDirection = 'right';
+                score = 0;
+                gameSpeed = 150;
+                scoreDisplay.textContent = score;
+
+                clearBoard(); // 게임 요소들만 제거
+                // 게임오버 화면은 숨김 처리만 함
+                gameOverScreen.style.display = 'none';
+
+                drawSnake();
+                createFood();
+
+                isGameRunning = false;
+            }
+
+            // 게임 보드 내의 뱀, 음식 요소만 제거하는 함수
+            function clearBoard() {
+                const gameElements = gameBoard.querySelectorAll('.snake-part, .food');
+                gameElements.forEach(el => el.remove());
+            }
+
+            // 특정 클래스를 가진 요소만 보드에서 제거하는 유틸리티 함수
+            function clearBoardElements(selector) {
+                const elements = gameBoard.querySelectorAll(selector);
+                elements.forEach(el => el.remove());
+            }
+
+
+            function drawSnake() {
+                 clearBoardElements('.snake-part');
+                snake.forEach((part, index) => {
+                    if (part.x >= 0 && part.x < gridWidth && part.y >= 0 && part.y < gridHeight) {
+                        const snakePart = document.createElement('div');
+                        snakePart.className = 'snake-part';
+                        if (index === 0) snakePart.classList.add('snake-head');
+                        const currentGridSize = Math.floor(gridSize);
+                        snakePart.style.width = currentGridSize + 'px';
+                        snakePart.style.height = currentGridSize + 'px';
+                        snakePart.style.left = Math.floor(part.x * gridSize) + 'px';
+                        snakePart.style.top = Math.floor(part.y * gridSize) + 'px';
+                        gameBoard.appendChild(snakePart);
+                    }
+                });
+            }
+
+             function drawFood() {
+                 clearBoardElements('.food');
+                if (food.x !== undefined && food.x >= 0 && food.x < gridWidth && food.y >= 0 && food.y < gridHeight) {
+                    const foodElement = document.createElement('div');
+                    foodElement.className = 'food';
+                    const currentGridSize = Math.floor(gridSize);
+                    foodElement.style.width = currentGridSize + 'px';
+                    foodElement.style.height = currentGridSize + 'px';
+                    foodElement.style.left = Math.floor(food.x * gridSize) + 'px';
+                    foodElement.style.top = Math.floor(food.y * gridSize) + 'px';
+                    gameBoard.appendChild(foodElement);
+                }
+            }
+
+            function createFood() {
+                 if (gridWidth <= 0 || gridHeight <= 0) {
+                    console.error("Cannot create food: Invalid grid dimensions.");
+                    food = {};
+                    drawFood();
+                    return;
+                }
+                let foodX, foodY;
+                let foodOnSnake;
+                let attempts = 0;
+                const maxAttempts = gridWidth * gridHeight * 2;
+                do {
+                    foodOnSnake = false;
+                    foodX = Math.floor(Math.random() * gridWidth);
+                    foodY = Math.floor(Math.random() * gridHeight);
+                    for (let part of snake) {
+                        if (part.x === foodX && part.y === foodY) {
+                            foodOnSnake = true;
+                            break;
+                        }
+                    }
+                    attempts++;
+                    if (attempts > maxAttempts) {
+                         console.warn("Could not place food without overlapping snake.");
+                         foodX = Math.floor(Math.random() * gridWidth);
+                         foodY = Math.floor(Math.random() * gridHeight);
+                         break;
+                    }
+                } while (foodOnSnake);
+                food = { x: foodX, y: foodY };
+                drawFood();
+            }
+
+            function moveSnake() {
+                if (!isGameRunning) return;
+                direction = nextDirection;
+                const head = { ...snake[0] };
+                switch (direction) {
+                    case 'up': head.y -= 1; break;
+                    case 'down': head.y += 1; break;
+                    case 'left': head.x -= 1; break;
+                    case 'right': head.x += 1; break;
+                }
+                if (head.x < 0 || head.x >= gridWidth || head.y < 0 || head.y >= gridHeight) {
+                    gameOver(); return;
+                }
+                for (let i = 1; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        gameOver(); return;
+                    }
+                }
+                snake.unshift(head);
+                if (head.x === food.x && head.y === food.y) {
+                    score += 10;
+                    scoreDisplay.textContent = score;
+                    createFood();
+                    if (gameSpeed > 50) {
+                        gameSpeed = Math.max(50, gameSpeed - 2);
+                        clearInterval(gameInterval);
+                        gameInterval = setInterval(gameLoop, gameSpeed);
+                    }
+                } else {
+                    snake.pop();
+                }
+                drawSnake();
+                drawFood();
+            }
+
+            function gameOver() {
+                clearInterval(gameInterval);
+                isGameRunning = false;
+                finalScoreDisplay.textContent = score;
+                gameOverScreen.style.display = 'flex'; // 게임 오버 화면 표시
+                startButton.textContent = '다시 시작';
+                startButton.style.display = 'block';
+                 document.querySelector('.control-text').style.display = 'block';
+                 startHint.style.display = 'block';
+            }
+
+            function gameLoop() {
+                moveSnake();
+            }
+
+            function setDirection(newDirection) {
+                 if (!isGameRunning) return;
+                const oppositeDirections = {
+                    'up': 'down', 'down': 'up', 'left': 'right', 'right': 'left'
+                };
+                if (direction !== oppositeDirections[newDirection]) {
+                    nextDirection = newDirection;
+                }
+            }
+
+            // --- 이벤트 리스너 ---
+
+            document.addEventListener('keydown', (e) => {
+                if (!isGameRunning && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    startGameAction();
+                    return;
+                }
+                if (isGameRunning) {
+                    switch (e.key) {
+                        case 'ArrowUp': setDirection('up'); break;
+                        case 'ArrowDown': setDirection('down'); break;
+                        case 'ArrowLeft': setDirection('left'); break;
+                        case 'ArrowRight': setDirection('right'); break;
+                    }
+                }
+            });
+
+            gameBoard.addEventListener('touchstart', (e) => {
+                if (!isGameRunning) return;
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+            }, { passive: true });
+
+            gameBoard.addEventListener('touchmove', (e) => {
+                 e.preventDefault();
+            }, { passive: false });
+
+            gameBoard.addEventListener('touchend', (e) => {
+                if (!isGameRunning || touchStartX === 0) return;
+                const touch = e.changedTouches[0];
+                touchEndX = touch.clientX;
+                touchEndY = touch.clientY;
+                handleSwipe();
+                touchStartX = 0;
+                touchStartY = 0;
+            }, { passive: true });
+
+            function handleSwipe() {
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    if (Math.abs(deltaX) > swipeThreshold) {
+                        setDirection(deltaX > 0 ? 'right' : 'left');
+                    }
+                } else {
+                    if (Math.abs(deltaY) > swipeThreshold) {
+                        setDirection(deltaY > 0 ? 'down' : 'up');
+                    }
+                }
+            }
+
+            function startGameAction() {
+                 calculateBoardSize();
+                 initGame(); // isGameRunning = false 포함
+                 isGameRunning = true; // 게임 시작 상태로 변경
+                 gameInterval = setInterval(gameLoop, gameSpeed);
+                 startButton.style.display = 'none';
+                 document.querySelector('.control-text').style.display = 'none';
+                 startHint.style.display = 'none';
+                 gameOverScreen.style.display = 'none'; // 시작 시 게임오버 화면 숨김
+            }
+
+            startButton.addEventListener('click', startGameAction);
+            restartButton.addEventListener('click', startGameAction);
+
+            window.addEventListener('resize', () => {
+                 if (!isGameRunning) {
+                      setupInitialScreen();
+                 }
+             });
+
+            function setupInitialScreen() {
+                calculateBoardSize();
+                clearBoard(); // 게임 요소만 제거
+                gameOverScreen.style.display = 'none'; // 게임 오버 화면 숨김
+                startButton.textContent = '게임 시작';
+                startButton.style.display = 'block';
+                document.querySelector('.control-text').style.display = 'block';
+                startHint.style.display = 'block';
+                scoreDisplay.textContent = 0;
+                isGameRunning = false;
+                food = {};
+            }
+
+            setupInitialScreen();
+
+        });
+    </script>
+</body>
+</html>
